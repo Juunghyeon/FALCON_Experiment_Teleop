@@ -142,7 +142,7 @@ class MotionPlayer:
     # Public API
     # ------------------------------------------------------------------
 
-    def reset(self, motion_idx=None, random_start=True, _blend=True):
+    def reset(self, motion_idx=None, random_start=True, _blend=True, init_pose=None):
         """Load a motion and reset the time counter.
 
         Parameters
@@ -154,6 +154,11 @@ class MotionPlayer:
         _blend : bool
             If True and a previous pose exists, start a cross-fade blend
             from the last output pose to the new motion's first frame.
+        init_pose : np.ndarray | None
+            (N_upper,) pose to blend from when there is no previous
+            playback pose yet (i.e. the very first reset). Lets the first
+            motion activation ease in from the robot's current pose
+            instead of snapping straight to frame 0.
         """
         if motion_idx is None:
             motion_idx = int(np.random.randint(self._n_motions))
@@ -166,10 +171,21 @@ class MotionPlayer:
         T = new_frames.shape[0]
         self._motion_len = (T - 1) / self._native_fps         # real seconds
 
-        # Capture current output pose as blend source before switching frames
-        if _blend and self._frames is not None and self._blend_steps > 0:
-            self._blend_src   = self._last_ref.copy() if self._last_ref is not None else self._frames[0].copy()
-            self._blend_count = self._blend_steps
+        # Capture current output pose as blend source before switching frames.
+        # A caller-supplied init_pose is the authoritative current pose (e.g.
+        # loco_manip tracks ref_upper_dof_pos even while this player is off
+        # and a return-to-default blend is running) so it takes priority over
+        # our own possibly-stale _last_ref.
+        if _blend and self._blend_steps > 0:
+            if init_pose is not None:
+                self._blend_src = np.asarray(init_pose, dtype=np.float32).copy()
+            elif self._last_ref is not None:
+                self._blend_src = self._last_ref.copy()
+            elif self._frames is not None:
+                self._blend_src = self._frames[0].copy()
+            else:
+                self._blend_src = None
+            self._blend_count = self._blend_steps if self._blend_src is not None else 0
         else:
             self._blend_src   = None
             self._blend_count = 0

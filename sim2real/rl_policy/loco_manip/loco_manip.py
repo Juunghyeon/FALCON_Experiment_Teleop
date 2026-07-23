@@ -126,6 +126,13 @@ class LocoManipPolicy(DecLocomotionPolicy):
             self.config.get("motion_player_fps_scale_step", 0.25)
         )
 
+        # Blend state for easing ref_upper_dof_pos back to the default pose
+        # when the motion player is toggled OFF (see _handle_motion_player_toggle).
+        self._upper_blend_src = None
+        self._upper_blend_target = None
+        self._upper_blend_count = 0
+        self._upper_blend_steps = int(self.config.get("motion_player_blend_steps", 20))
+
     def get_current_obs_buffer_dict(self, robot_state_data):
         current_obs_dict = super().get_current_obs_buffer_dict(robot_state_data)
         current_obs_dict["actions"] = self.last_policy_action
@@ -485,6 +492,12 @@ class LocoManipPolicy(DecLocomotionPolicy):
 
         if self.motion_player is not None and self.motion_player.enabled:
             self.ref_upper_dof_pos[:] = self.motion_player.step()
+        elif self._upper_blend_count > 0:
+            t = 1.0 - self._upper_blend_count / self._upper_blend_steps
+            self.ref_upper_dof_pos[0] = (
+                (1.0 - t) * self._upper_blend_src + t * self._upper_blend_target
+            )
+            self._upper_blend_count -= 1
 
         scaled_policy_action = self.rl_inference(robot_state_data)
 
@@ -635,15 +648,22 @@ class LocoManipPolicy(DecLocomotionPolicy):
             self.logger.warning("MotionPlayer not initialised — check use_motion_player and motion_player_pkl in config")
             return
         if not self.motion_player.enabled:
-            self.motion_player.reset(motion_idx=0, random_start=False, _blend=False)
+            self.motion_player.reset(
+                motion_idx=0, random_start=False, _blend=True,
+                init_pose=self.ref_upper_dof_pos[0],
+            )
             self.motion_player.enabled = True
+            self._upper_blend_count = 0
             self.logger.info(colored(
                 f"MotionPlayer ON  motion='{self.motion_player.current_motion_name}'  "
                 f"fps_scale={self.motion_player.fps_scale:.2f}", "cyan"
             ))
         else:
             self.motion_player.enabled = False
-            self.logger.info(colored("MotionPlayer OFF", "cyan"))
+            self._upper_blend_src = self.ref_upper_dof_pos[0].copy()
+            self._upper_blend_target = self.default_dof_angles[self.upper_dof_indices].copy()
+            self._upper_blend_count = self._upper_blend_steps
+            self.logger.info(colored("MotionPlayer OFF — easing back to default upper pose", "cyan"))
 
     def _handle_motion_player_speed(self, delta):
         if self.motion_player is None:
