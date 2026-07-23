@@ -14,6 +14,7 @@ from sim2real.rl_policy.dec_loco.dec_loco import DecLocomotionPolicy
 
 from termcolor import colored
 from sim2real.utils.arm_ik.robot_arm_ik_g1_23dof import G1_29_ArmIK_NoWrists
+from sim2real.utils.motion_player import MotionPlayer
 
 
 class LocoManipPolicy(DecLocomotionPolicy):
@@ -117,6 +118,13 @@ class LocoManipPolicy(DecLocomotionPolicy):
         self.upper_body_controller = None
         if self.config.get("use_upper_body_controller", False):
             self.init_upper_body_controller()
+
+        self.motion_player = None
+        if self.config.get("use_motion_player", False):
+            self._init_motion_player()
+        self._motion_player_fps_scale_step = float(
+            self.config.get("motion_player_fps_scale_step", 0.25)
+        )
 
     def get_current_obs_buffer_dict(self, robot_state_data):
         current_obs_dict = super().get_current_obs_buffer_dict(robot_state_data)
@@ -475,6 +483,9 @@ class LocoManipPolicy(DecLocomotionPolicy):
             for idx in [19, 20, 21, 26, 27, 28]:
                 self.ref_upper_dof_pos[0, idx - 15] = 0.0
 
+        if self.motion_player is not None and self.motion_player.enabled:
+            self.ref_upper_dof_pos[:] = self.motion_player.step()
+
         scaled_policy_action = self.rl_inference(robot_state_data)
 
         if self.get_ready_state:
@@ -513,6 +524,14 @@ class LocoManipPolicy(DecLocomotionPolicy):
             self.logger.info(colored(f"lin_vel_command: {self.lin_vel_command}", "green"))
         elif keycode in ["1", "2"]:
             self._handle_base_height_control(keycode)
+        elif keycode == "t":
+            self._handle_motion_player_toggle()
+        elif keycode == "f":
+            self._handle_motion_player_speed(+self._motion_player_fps_scale_step)
+        elif keycode == "g":
+            self._handle_motion_player_speed(-self._motion_player_fps_scale_step)
+        elif keycode == "n":
+            self._handle_motion_player_next()
 
     def _handle_start_policy(self):
         """Toggle policy on; second press → stand in place."""
@@ -550,6 +569,10 @@ class LocoManipPolicy(DecLocomotionPolicy):
         elif cur_key == "A+B":
             self.command_sender.kp_level = 1.0
             self.logger.info(colored(f"kp level reset: {self.command_sender.kp_level}", "green"))
+        elif cur_key == "L1":
+            self._handle_motion_player_toggle()
+        elif cur_key == "R1+up":
+            self._handle_motion_player_next()
         elif self.config.get("use_upper_body_controller", False):
             self._handle_joystick_upper_body(cur_key)
 
@@ -594,6 +617,52 @@ class LocoManipPolicy(DecLocomotionPolicy):
             self.base_height_command[0, 0] += 0.1
         elif cur_key == "B+down":
             self.base_height_command[0, 0] -= 0.1
+
+    def _init_motion_player(self):
+        import traceback
+        try:
+            self.motion_player = MotionPlayer.from_config(self.config)
+            self.motion_player.enabled = False
+            self.logger.info(colored(
+                f"MotionPlayer initialised (inactive): {self.motion_player}", "cyan"
+            ))
+        except Exception as e:
+            self.logger.error(f"MotionPlayer init failed: {e}\n{traceback.format_exc()}")
+            self.motion_player = None
+
+    def _handle_motion_player_toggle(self):
+        if self.motion_player is None:
+            self.logger.warning("MotionPlayer not initialised — check use_motion_player and motion_player_pkl in config")
+            return
+        if not self.motion_player.enabled:
+            self.motion_player.reset(motion_idx=0, random_start=False, _blend=False)
+            self.motion_player.enabled = True
+            self.logger.info(colored(
+                f"MotionPlayer ON  motion='{self.motion_player.current_motion_name}'  "
+                f"fps_scale={self.motion_player.fps_scale:.2f}", "cyan"
+            ))
+        else:
+            self.motion_player.enabled = False
+            self.logger.info(colored("MotionPlayer OFF", "cyan"))
+
+    def _handle_motion_player_speed(self, delta):
+        if self.motion_player is None:
+            return
+        self.motion_player.adjust_fps_scale(delta)
+        self.logger.info(colored(
+            f"MotionPlayer fps_scale={self.motion_player.fps_scale:.2f}  "
+            f"(motion speed {self.motion_player.fps_scale:.1f}×)", "cyan"
+        ))
+
+    def _handle_motion_player_next(self):
+        if self.motion_player is None:
+            return
+        next_idx = (self.motion_player._motion_idx + 1) % self.motion_player._n_motions
+        self.motion_player.reset(motion_idx=next_idx, random_start=False)
+        self.logger.info(colored(
+            f"MotionPlayer → motion #{self.motion_player._motion_idx}  "
+            f"'{self.motion_player.current_motion_name}'", "cyan"
+        ))
 
     def _print_control_status(self):
         super()._print_control_status()

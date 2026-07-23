@@ -69,6 +69,15 @@ balance_descriptor:
   bd_force_zero_obs: false
   bd_obs_ema_alpha: 1.0
 
+# ---- Motion Player (AMASS/ACCAD upper-body playback) -----------------------
+# true  → AMASS motion replays as ref_upper_dof_pos; toggle with 't' key
+# false → upper body stays at default angles
+use_motion_player: false
+motion_player_pkl: "humanoidverse/data/motions/g1_29dof/v1/accad_val.pkl"
+motion_player_fps_scale: 1.0       # playback speed (1.0 = original)
+motion_player_fps_scale_step: 0.25 # f/g key increment
+motion_player_blend_steps: 20      # cross-fade steps on motion transition
+
 GAIT_PERIOD: 0.9 # Gait period in seconds
 DESIRED_BASE_HEIGHT: 0.75 # Desired base height
 

@@ -259,6 +259,17 @@ python rl_policy/loco_manip/loco_manip.py \
 | `6` | `A+right` | kp scale +0.01 |
 | `0` | `A+Y` 또는 `A+B` | kp scale 1.0 (초기화) |
 
+### Motion Player (상체 AMASS 모션 재생)
+
+> `use_motion_player: true` + `motion_player_pkl` 경로 설정 시 활성화. Sim2Sim·Sim2Real 모두 동작.
+
+| 키보드 | 조이스틱 | 동작 |
+|--------|----------|------|
+| `t` | `L1` | Motion player ON/OFF 토글 |
+| `n` | `R1+up` | 다음 모션으로 skip |
+| `f` | — | 재생 속도 +0.25× |
+| `g` | — | 재생 속도 -0.25× |
+
 ### MuJoCo 뷰어 키 (Sim2Sim 전용)
 
 | 키 | 동작 |
