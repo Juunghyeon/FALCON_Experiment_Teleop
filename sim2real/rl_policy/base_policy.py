@@ -119,6 +119,7 @@ class BasePolicy:
         self.last_policy_action = np.zeros((1, self.num_dofs))
         self.scaled_policy_action = np.zeros((1, self.num_dofs))
         self.policy_action_scale = policy_action_scale
+        self.action_smooth_alpha = float(self.config.get("ACTION_SMOOTH_ALPHA", 1.0))
     
     def _init_command_components(self):
         """Initialize control-related components and commands."""
@@ -157,6 +158,7 @@ class BasePolicy:
         """Initialize input device (joystick or keyboard)."""
         if self.config.get("USE_JOYSTICK", False):
             self._init_joystick_handler()
+            self._init_keyboard_handler()  # also enable terminal keys alongside joystick
         else:
             self._init_keyboard_handler()
     
@@ -195,10 +197,10 @@ class BasePolicy:
             self.logger.info("Wireless Controller Initialized")
     
     def _init_keyboard_handler(self):
-        """Initialize keyboard handler."""
-        self.logger.info("Using keyboard")
-        self.use_joystick = False
-        # Start keyboard listener in a daemon thread
+        """Initialize keyboard listener thread (terminal key input)."""
+        if not self.config.get("USE_JOYSTICK", False):
+            self.use_joystick = False
+            self.logger.info("Using keyboard")
         threading.Thread(target=self.start_key_listener, daemon=True).start()
         self.logger.info("Keyboard Listener Initialized")
 
@@ -245,10 +247,15 @@ class BasePolicy:
         obs = self.prepare_obs_for_rl(robot_state_data)
         policy_action = self.policy(obs)
         policy_action = np.clip(policy_action, -100, 100)
-        
+
+        # EMA smoothing on raw policy output (pre-scale). alpha=1.0 means no smoothing.
+        alpha = self.action_smooth_alpha
+        if alpha < 1.0:
+            policy_action = alpha * policy_action + (1.0 - alpha) * self.last_policy_action
+
         self.last_policy_action = policy_action.copy()
         self.scaled_policy_action = policy_action * self.policy_action_scale
-        
+
         return self.scaled_policy_action
 
     # ============================================================================
@@ -299,7 +306,10 @@ class BasePolicy:
             for key in self.obs_buf_dict
         }
         
-        return {"actor_obs": self.obs_buf_dict["actor_obs"].astype(np.float32)}
+        actor_obs = self.obs_buf_dict["actor_obs"].astype(np.float32)
+        if "actor_obs_bd" in self.obs_buf_dict:
+            actor_obs = np.concatenate([actor_obs, self.obs_buf_dict["actor_obs_bd"].astype(np.float32)], axis=1)
+        return {"actor_obs": actor_obs}
 
     # ============================================================================
     # Control/Command Methods

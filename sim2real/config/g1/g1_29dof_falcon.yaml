@@ -4,14 +4,18 @@ ASSET_ROOT: "../humanoidverse/data/robots/g1" # Robot Asset Root
 ASSET_FILE: "../humanoidverse/data/robots/g1/g1_29dof.urdf" # Robot Asset File"
 
 # Model path for the trained policy
+# use_balance_descriptor: true  → input dim=578 (BD policy)
+# use_balance_descriptor: false → input dim=575 (original FALCON)
 model_path: "models/falcon/g1_29dof.onnx"
 
 SDK_TYPE: "unitree" # SDK type, "unitree", "booster"
 MOTOR_TYPE: "serial" # Motor type, "serial" or "parallel"
 
-## SIM
+## Network
 DOMAIN_ID: 0 # Domain id
-INTERFACE: "lo" # in simulation, lo0 for mac, lo for linux
+# sim2sim: "lo" (Linux) / "lo0" (Mac)
+# sim2real: set to your ethernet interface, e.g. "eth0" or "enp3s0"
+INTERFACE: "lo"
 
 FREE_BASE: True
 
@@ -30,7 +34,40 @@ VISUALIZE_PIN: False
 VISUALIZE_FORCES: False
 
 residual_upper_body_action: True # Whether to use residual upper body action for balancing
-use_upper_body_controller: True # Whether to use upper body controller
+use_upper_body_controller: False # Whether to use IK-based upper body controller
+
+# ---- Balance Descriptor (BD) ----------------------------------------
+# true  → BD policy (input dim=578): use with BD-trained onnx
+# false → original FALCON (input dim=575): use with original onnx
+use_balance_descriptor: false
+
+balance_descriptor:
+  bd_nominal_type: 3       # 1=Nominal-1, 3=Nominal-3 (must match training)
+  bd_d_ref: 0.10           # phase-invariant reference length (m)
+  bd_d_ref_ds: 0.12
+  bd_d_ref_ss: 0.05
+  bd_delta_safe: 2.0       # threat threshold
+  bd_m_safe_ds: -0.40
+  bd_m_safe_ss: -0.85
+  # Real robot joint vel is noisy → lower alpha for stronger smoothing
+  bd_ema_alpha: 0.1        # l-channel smoothing (lower than sim: 0.3→0.1 for noise)
+  bd_ema_alpha_k: 0.05     # k-channel smoothing (stronger)
+  bd_landing_freeze_n: 3   # freeze h_dot_ns N steps after touchdown
+  bd_h_dot_l_clamp: 1000.0 # effectively no clamp (matches training)
+  bd_h_dot_k_clamp: 1000.0
+  bd_base_z_nominal: 0.75  # real-robot base_pos.z override (m)
+  bd_delta_lp_alpha: 0.0
+  bd_delta_fall_alpha: 0.0
+  bd_delta_bar_clamp: 3.0  # suppress l_dot spikes; real disturbance dbar~1~4
+  bd_delta_p_dead: 0.0
+  bd_m_bar_dead: 0.0
+  bd_pitch_safe_gain: 0.8
+  bd_u_D_gate_dbar: 0.0
+  bd_pitch_dot_thresh: 0.3
+  bd_crouch_drop: 0.0
+  bd_dp_mag_thresh: 0.02   # min dp_mag(m) to activate u_D/delta_bar_norm
+  bd_force_zero_obs: false
+  bd_obs_ema_alpha: 1.0
 
 GAIT_PERIOD: 0.9 # Gait period in seconds
 DESIRED_BASE_HEIGHT: 0.75 # Desired base height
