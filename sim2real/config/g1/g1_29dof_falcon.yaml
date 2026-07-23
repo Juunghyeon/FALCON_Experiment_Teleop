@@ -74,7 +74,7 @@ balance_descriptor:
 # false → upper body stays at default angles
 use_motion_player: true
 motion_player_pkl: "humanoidverse/data/motions/g1_29dof/v1/accad_val.pkl"
-motion_player_fps_scale: 1.0       # playback speed (1.0 = original)
+motion_player_fps_scale: 0.1       # playback speed (1.0 = original)
 motion_player_fps_scale_step: 0.25 # f/g key increment
 motion_player_blend_steps: 20      # cross-fade steps on motion transition
 
