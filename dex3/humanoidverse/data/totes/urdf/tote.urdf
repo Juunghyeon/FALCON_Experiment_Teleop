@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- This URDF was automatically created by SolidWorks to URDF Exporter! Originally created by Stephen Brawner (brawner@gmail.com) 
+     Commit Version: 1.6.0-4-g7f85cfe  Build Version: 1.6.7995.38578
+     For more information, please see http://wiki.ros.org/sw_urdf_exporter -->
+<robot
+  name="tote">
+  <link
+    name="base_link">
+    <inertial>
+      <origin
+        xyz="1.5908E-05 -0.008485 9.4153E-05"  
+        rpy="0 0 0" />
+      <!-- <origin
+        xyz="0 0 0"  
+        rpy="0 0 0" /> -->
+      <mass
+        value="0.61805" />
+      <!-- <inertia
+        ixx="0.012856"
+        ixy="3.3668E-08"
+        ixz="-1.9611E-06"
+        iyy="0.018165"
+        iyz="7.4279E-07"
+        izz="0.0063926" /> -->
+      <inertia
+        ixx="0.012856"
+        ixy="3.3668E-08"
+        ixz="-1.9611E-06"
+        iyy="0.018165"
+        iyz="7.4279E-07"
+        izz="0.0063926" />
+    </inertial>
+    <visual>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="meshes/base_link.STL" scale="0.8 0.6 2.0" />
+      </geometry>
+      <material
+        name="">
+        <color
+          rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin
+        xyz="0 0 0"
+        rpy="0 0 0" />
+      <geometry>
+        <mesh
+          filename="meshes/base_link.STL" scale="0.8 0.6 2.0" />
+      </geometry>
+    </collision>
+  </link>
+</robot>
