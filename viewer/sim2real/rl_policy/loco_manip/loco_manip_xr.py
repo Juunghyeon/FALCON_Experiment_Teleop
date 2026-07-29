@@ -13,6 +13,11 @@ Usage:
         --config=config/g1/g1_29dof_falcon.yaml \
         --model_path=models/falcon/g1_29dof.onnx \
         --cert_file=/path/to/cert.pem --key_file=/path/to/key.pem
+
+Add first-person video from the robot's own head camera with
+    --display_mode immersive --head_cam --head_cam_source robot \
+    --img_server_ip <PC2 IP>
+(or --head_cam_source sim for the Mujoco head camera; see head_cam_source.py).
 """
 
 import argparse
@@ -27,6 +32,10 @@ sys.path.append("../")
 sys.path.append("./rl_policy")
 
 from sim2real.rl_policy.loco_manip.loco_manip import LocoManipPolicy
+from sim2real.utils.head_cam_source import (
+    DEFAULT_IMG_SERVER_IP,
+    DEFAULT_IMG_SERVER_REQUEST_PORT,
+)
 
 # Workspace clamp for the EE targets (robot/waist frame, meters).
 WORKSPACE_X = (0.10, 0.55)
@@ -44,7 +53,11 @@ STALE_TIMEOUT_S = 0.5
 class LocoManipPolicyXR(LocoManipPolicy):
     def __init__(self, config, model_path, cert_file, key_file, engage_mode="any",
                  display_mode="pass-through", motion_scale=1.0, xr_mode="controller",
-                 xr_debug=False, head_cam=False, head_cam_width=640, head_cam_height=480,
+                 xr_debug=False, head_cam=False, head_cam_source="sim",
+                 head_cam_width=640, head_cam_height=480,
+                 head_cam_transport="auto",
+                 img_server_ip=DEFAULT_IMG_SERVER_IP,
+                 img_server_port=DEFAULT_IMG_SERVER_REQUEST_PORT,
                  rl_rate=50, policy_action_scale=0.25):
         if not config.get("use_upper_body_controller", False):
             raise ValueError(
@@ -62,9 +75,20 @@ class LocoManipPolicyXR(LocoManipPolicy):
         super().__init__(config=config, model_path=model_path, rl_rate=rl_rate,
                           policy_action_scale=policy_action_scale)
 
-        self._init_xr(cert_file, key_file, display_mode, xr_mode, head_cam_width, head_cam_height)
+        # The camera has to be connected before the XR display is built: the
+        # real robot's image server is what tells us the frame geometry
+        # (resolution, mono vs. binocular) the headset has to be set up for.
         if head_cam:
-            self._init_head_cam(head_cam_width, head_cam_height)
+            self._init_head_cam(head_cam_source, head_cam_width, head_cam_height,
+                                head_cam_transport, img_server_ip, img_server_port)
+            img_shape = self._head_cam_shape
+            binocular = self._head_cam_binocular
+        else:
+            self._use_webrtc = False
+            img_shape = (head_cam_height, head_cam_width)
+            binocular = False
+
+        self._init_xr(cert_file, key_file, display_mode, xr_mode, img_shape, binocular)
 
         # Deadman-switch engage state.
         self._engaged = False
@@ -73,58 +97,106 @@ class LocoManipPolicyXR(LocoManipPolicy):
         self._last_xr_time = 0.0
         self._xr_debug_count = 0
 
-    def _init_xr(self, cert_file, key_file, display_mode, xr_mode, img_width, img_height):
+    def _init_xr(self, cert_file, key_file, display_mode, xr_mode, img_shape, binocular):
         from televuer import TeleVuerWrapper
 
-        # immersive/ego display modes require an image transport; zmq (in-process
-        # shared memory -> vuer's own zmq bridge) is what render_to_xr() feeds.
-        # webrtc is the other option but needs a separate signaling server we
-        # don't have, so zmq is the only one that works with our setup.
+        # immersive/ego display modes require an image transport. zmq (in-process
+        # shared memory -> vuer's own zmq bridge) is what render_to_xr() feeds,
+        # and is the only option for the sim camera. With the real robot the
+        # image server can also expose a WebRTC stream, which the headset pulls
+        # straight from the robot — no frames pass through this process at all.
         needs_image_transport = display_mode in ("immersive", "ego")
+        use_webrtc = needs_image_transport and self._use_webrtc
 
         self.tv_wrapper = TeleVuerWrapper(
             use_hand_tracking=(xr_mode == "hand"),
-            binocular=False,
-            img_shape=(img_height, img_width),
+            binocular=binocular,
+            img_shape=img_shape,
             display_fps=30.0,
             display_mode=display_mode,
-            zmq=needs_image_transport,
+            zmq=needs_image_transport and not use_webrtc,
+            webrtc=use_webrtc,
+            webrtc_url=self._head_cam_webrtc_url if use_webrtc else None,
             cert_file=cert_file,
             key_file=key_file,
             return_hand_rot_data=False,
         )
         self.logger.info(colored(
-            f"XR bridge ready (display_mode={display_mode}, xr_mode={xr_mode}). "
-            "Open the headset browser and Enter VR.", "cyan"
+            f"XR bridge ready (display_mode={display_mode}, xr_mode={xr_mode}"
+            + (f", video={'webrtc' if use_webrtc else 'zmq'} {img_shape[1]}x{img_shape[0]}"
+               f"{' stereo' if binocular else ''}" if needs_image_transport and self.head_cam else "")
+            + "). Open the headset browser and Enter VR.", "cyan"
         ))
 
-    def _init_head_cam(self, width, height):
-        from sim2real.utils.head_cam_shm import HeadCamSubscriber
+    def _init_head_cam(self, source, width, height, transport, img_server_ip, img_server_port):
+        from sim2real.utils.head_cam_source import make_head_cam_source
 
-        self._head_cam_width = width
-        self._head_cam_height = height
         self._head_cam_connected = False
+        self._head_cam_src = None
+        self._use_webrtc = False
+        self._head_cam_webrtc_url = None
+        self._head_cam_shape = (height, width)
+        self._head_cam_binocular = False
+
         try:
-            self._head_cam_sub = HeadCamSubscriber(connect_timeout=10.0)
-            self._head_cam_connected = True
-            self.logger.info(colored("head camera stream connected", "green"))
-        except TimeoutError as e:
-            self.logger.error(
-                f"{e}\nStart sim_env with --head_cam, e.g.:\n"
-                "  python sim_env/loco_manip.py --config=... --head_cam"
+            self._head_cam_src = make_head_cam_source(
+                source, width=width, height=height,
+                img_server_ip=img_server_ip, img_server_port=img_server_port,
             )
-            self._head_cam_sub = None
+        except Exception as e:
+            hint = (
+                "Start sim_env with --head_cam, e.g.:\n"
+                "  python sim_env/loco_manip.py --config=... --head_cam"
+                if source == "sim" else
+                f"Is teleimager's image_server running on the robot's PC2 ({img_server_ip})?\n"
+                "  (on PC2)  python -m teleimager.image_server"
+            )
+            self.logger.error(f"head camera ({source}) unavailable: {e}\n{hint}")
+            return
+
+        self._head_cam_connected = True
+        self._head_cam_shape = self._head_cam_src.img_shape
+        self._head_cam_binocular = self._head_cam_src.binocular
+
+        if transport == "webrtc" and not self._head_cam_src.webrtc_enabled:
+            raise ValueError(
+                "--head_cam_transport webrtc requested but the image server does not "
+                "have enable_webrtc set for head_camera."
+            )
+        self._use_webrtc = self._head_cam_src.webrtc_enabled and transport in ("auto", "webrtc")
+        self._head_cam_webrtc_url = self._head_cam_src.webrtc_url
+
+        self.logger.info(colored(
+            f"head camera stream connected (source={source}, "
+            f"{self._head_cam_shape[1]}x{self._head_cam_shape[0]}, "
+            f"{'binocular' if self._head_cam_binocular else 'monocular'}, "
+            f"video={'webrtc' if self._use_webrtc else 'zmq'})", "green"
+        ))
+
+        # Config negotiation succeeding does not prove video is flowing: with the
+        # image server unreachable, teleimager falls back to a cached cam_config
+        # yaml and the client comes up looking healthy but empty.
+        if not self._use_webrtc and hasattr(self._head_cam_src, "wait_for_frame"):
+            if not self._head_cam_src.wait_for_frame(timeout=2.0):
+                self.logger.warning(colored(
+                    f"connected to the camera config but no frames from {img_server_ip} yet — "
+                    "the config may have come from a cached cam_config yaml rather than a live "
+                    "server. Check that image_server is running on PC2 and the ZMQ port is "
+                    "reachable. Continuing; the headset will stay black until frames arrive.",
+                    "yellow"
+                ))
 
     def _forward_head_cam_frame(self):
-        if not self._head_cam_connected:
+        # With WebRTC the headset pulls video from the image server itself, so
+        # there is nothing for us to forward.
+        if not self._head_cam_connected or self._use_webrtc:
             return
-        frame_rgb = self._head_cam_sub.read()
-        if frame_rgb is None:
+        # Sources hand back BGR because televuer's render_to_xr() always applies
+        # COLOR_BGR2RGB before display.
+        frame_bgr = self._head_cam_src.read_bgr()
+        if frame_bgr is None:
             return
-        # televuer's render_to_xr() always applies COLOR_BGR2RGB before display,
-        # so a genuinely-RGB source frame must be pre-flipped to BGR here for the
-        # final result seen in the headset to come out RGB again.
-        self.tv_wrapper.render_to_xr(frame_rgb[:, :, ::-1])
+        self.tv_wrapper.render_to_xr(frame_bgr)
 
     # ------------------------------------------------------------------
     # Deadman switch
@@ -275,6 +347,11 @@ class LocoManipPolicyXR(LocoManipPolicy):
                 self.tv_wrapper.close()
             except Exception:
                 pass
+            if self.head_cam and self._head_cam_connected:
+                try:
+                    self._head_cam_src.close()
+                except Exception:
+                    pass
 
 
 if __name__ == "__main__":
@@ -292,11 +369,25 @@ if __name__ == "__main__":
     parser.add_argument("--xr_mode", type=str, default="controller", choices=["controller", "hand"])
     parser.add_argument("--xr_debug", action="store_true")
     parser.add_argument("--head_cam", action="store_true",
-                         help="Forward the sim_env head camera feed to the headset. "
-                              "Requires sim_env to be started with --head_cam, and "
-                              "--display_mode immersive (or ego).")
-    parser.add_argument("--head_cam_width", type=int, default=640)
-    parser.add_argument("--head_cam_height", type=int, default=480)
+                         help="Show the robot's head camera feed in the headset. "
+                              "Requires --display_mode immersive (or ego).")
+    parser.add_argument("--head_cam_source", type=str, default="sim", choices=["sim", "robot"],
+                         help="'sim': Mujoco head camera (sim_env must run with --head_cam). "
+                              "'robot': the real G1's head camera, served by teleimager's "
+                              "image_server on PC2.")
+    parser.add_argument("--head_cam_transport", type=str, default="auto",
+                         choices=["auto", "zmq", "webrtc"],
+                         help="Video transport for --head_cam_source robot. 'auto' prefers "
+                              "WebRTC (headset pulls video straight from the robot) when the "
+                              "image server offers it, else ZMQ via this process.")
+    parser.add_argument("--img_server_ip", type=str, default=DEFAULT_IMG_SERVER_IP,
+                         help="IP of the robot PC2 running teleimager's image_server.")
+    parser.add_argument("--img_server_port", type=int, default=DEFAULT_IMG_SERVER_REQUEST_PORT,
+                         help="teleimager camera-config request port.")
+    parser.add_argument("--head_cam_width", type=int, default=640,
+                         help="Sim head camera width (robot resolution comes from the server).")
+    parser.add_argument("--head_cam_height", type=int, default=480,
+                         help="Sim head camera height (robot resolution comes from the server).")
     args = parser.parse_args()
 
     with open(args.config) as file:
@@ -317,8 +408,12 @@ if __name__ == "__main__":
         xr_mode=args.xr_mode,
         xr_debug=args.xr_debug,
         head_cam=args.head_cam,
+        head_cam_source=args.head_cam_source,
         head_cam_width=args.head_cam_width,
         head_cam_height=args.head_cam_height,
+        head_cam_transport=args.head_cam_transport,
+        img_server_ip=args.img_server_ip,
+        img_server_port=args.img_server_port,
         rl_rate=50,
         policy_action_scale=0.25,
     )
