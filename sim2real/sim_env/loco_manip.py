@@ -15,8 +15,8 @@ from sim2real.utils.math import quat_rotate_numpy
 
 
 class LocoManipSimulator(BaseSimulator):
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, config, head_cam=False, head_cam_name="head_camera"):
+        super().__init__(config, head_cam=head_cam, head_cam_name=head_cam_name)
         self.EE_xfrc = 0
         self.t = 0
         self.left_hand_link_name = self.config.get("left_hand_link_name", "left_hand_link")
@@ -62,10 +62,15 @@ class LocoManipSimulator(BaseSimulator):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Robot")
     parser.add_argument("--config", type=str, default="config/g1/g1_29dof.yaml", help="config file")
+    parser.add_argument("--head_cam", action="store_true",
+                         help="Render the head camera and publish it to shared memory for "
+                              "loco_manip_xr.py to forward to the headset.")
     args = parser.parse_args()
 
     with open(args.config) as file:
         config = yaml.safe_load(file)
 
-    simulation = LocoManipSimulator(config)
+    simulation = LocoManipSimulator(
+        config, head_cam=args.head_cam, head_cam_name=config.get("HEAD_CAMERA_NAME", "head_camera")
+    )
     simulation.sim_thread.start()

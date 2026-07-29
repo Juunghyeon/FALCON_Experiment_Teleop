@@ -21,8 +21,16 @@ from sim2real.utils.sdk2py_bridge import ElasticBand, create_sdk2py_bridge
 
 
 class BaseSimulator:
-    def __init__(self, config):
+    def __init__(self, config, head_cam=False, head_cam_name="head_camera",
+                 head_cam_width=640, head_cam_height=480):
         self.config = config
+        self.head_cam = head_cam
+        self.head_cam_name = head_cam_name
+        self.head_cam_width = head_cam_width
+        self.head_cam_height = head_cam_height
+        self._head_cam_renderer = None
+        self._head_cam_publisher = None
+
         self.init_config()
         self.init_scene()
         self.init_factory()
@@ -65,6 +73,14 @@ class BaseSimulator:
         self.mj_model = mujoco.MjModel.from_xml_path(self.config["ROBOT_SCENE"])
         self.mj_data = mujoco.MjData(self.mj_model)
         self.mj_model.opt.timestep = self.sim_dt
+
+        if self.head_cam:
+            cam_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, self.head_cam_name)
+            if cam_id == -1:
+                raise ValueError(
+                    f"camera '{self.head_cam_name}' not found in {self.config['ROBOT_SCENE']}. "
+                    "Set HEAD_CAMERA_NAME in the config if the scene uses a different camera name."
+                )
 
         base_body_name = self.config.get("BASE_BODY_NAME", "pelvis")
         self.base_id = self.mj_model.body(base_body_name).id
@@ -124,6 +140,25 @@ class BaseSimulator:
             self.mj_data.ctrl = self.torques
         mujoco.mj_step(self.mj_model, self.mj_data)
 
+    def _publish_head_cam_frame(self):
+        # Lazily created here (not in init_scene): the GL context a Renderer
+        # opens must belong to the thread that will use it, and this
+        # simulation thread — not the constructor's thread — is the one
+        # that calls this method every step.
+        if self._head_cam_renderer is None:
+            self._head_cam_renderer = mujoco.Renderer(
+                self.mj_model, height=self.head_cam_height, width=self.head_cam_width
+            )
+            from sim2real.utils.head_cam_shm import HeadCamPublisher
+            self._head_cam_publisher = HeadCamPublisher(
+                height=self.head_cam_height, width=self.head_cam_width
+            )
+            self.logger.info(f"Head camera publishing '{self.head_cam_name}' "
+                              f"({self.head_cam_width}x{self.head_cam_height}) to shared memory")
+        self._head_cam_renderer.update_scene(self.mj_data, camera=self.head_cam_name)
+        frame_rgb = self._head_cam_renderer.render()
+        self._head_cam_publisher.publish(frame_rgb)
+
     def simulation_thread(self):
         sim_cnt = 0
         start_time = time.time()
@@ -131,6 +166,8 @@ class BaseSimulator:
             self.sim_step()
             if sim_cnt % (self.viewer_dt / self.sim_dt) == 0:
                 self.viewer.sync()
+                if self.head_cam:
+                    self._publish_head_cam_frame()
             # Get FPS
             sim_cnt += 1
             if sim_cnt % 100 == 0:
@@ -143,10 +180,17 @@ class BaseSimulator:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Robot")
     parser.add_argument("--config", type=str, default="config/g1/g1_29dof.yaml", help="config file")
+    parser.add_argument("--head_cam", action="store_true",
+                         help="Render the head camera each viewer-sync tick and publish it to "
+                              "shared memory for loco_manip_xr.py to forward to the headset.")
     args = parser.parse_args()
 
     with open(args.config) as file:
         config = yaml.safe_load(file)
 
-    simulation = BaseSimulator(config)
+    simulation = BaseSimulator(
+        config,
+        head_cam=args.head_cam,
+        head_cam_name=config.get("HEAD_CAMERA_NAME", "head_camera"),
+    )
     simulation.sim_thread.start()
