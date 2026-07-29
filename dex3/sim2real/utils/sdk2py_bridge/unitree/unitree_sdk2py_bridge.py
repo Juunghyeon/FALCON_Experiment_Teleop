@@ -61,9 +61,14 @@ class UnitreeSdk2Bridge(BasicSdk2Bridge):
             self._init_dex3_hand_bridge()
 
     # Order per Unitree Dex3-1 docs ("Sort by message structure"), matching
-    # xr_teleoperate/teleop/robot_control/hand_retargeting.py's
-    # left/right_dex3_api_joint_names — this is the order HandCmd_/HandState_
-    # motor_cmd/motor_state arrays use on the wire.
+    # xr_teleoperate/teleop/robot_control/robot_hand_unitree.py's
+    # Dex3_1_Left_JointIndex / Dex3_1_Right_JointIndex — this is the order
+    # HandCmd_/HandState_ motor_cmd/motor_state arrays use on the wire.
+    # NOTE: left and right are NOT mirror-symmetric here — left is
+    # thumb/middle/index, right is thumb/index/middle. Swapping this breaks
+    # ctrl_dual_hand's per-joint indexing on the real controller and would
+    # send middle-finger commands to the index finger (and vice versa) on
+    # the right hand only.
     _DEX3_LEFT_JOINTS = [
         "left_hand_thumb_0_joint", "left_hand_thumb_1_joint", "left_hand_thumb_2_joint",
         "left_hand_middle_0_joint", "left_hand_middle_1_joint",
@@ -71,8 +76,8 @@ class UnitreeSdk2Bridge(BasicSdk2Bridge):
     ]
     _DEX3_RIGHT_JOINTS = [
         "right_hand_thumb_0_joint", "right_hand_thumb_1_joint", "right_hand_thumb_2_joint",
-        "right_hand_middle_0_joint", "right_hand_middle_1_joint",
         "right_hand_index_0_joint", "right_hand_index_1_joint",
+        "right_hand_middle_0_joint", "right_hand_middle_1_joint",
     ]
 
     def _init_dex3_hand_bridge(self):

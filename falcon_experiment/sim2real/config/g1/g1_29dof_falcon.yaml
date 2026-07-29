@@ -15,7 +15,7 @@ MOTOR_TYPE: "serial" # Motor type, "serial" or "parallel"
 DOMAIN_ID: 0 # Domain id
 # sim2sim: "lo" (Linux) / "lo0" (Mac)
 # sim2real: set to your ethernet interface, e.g. "eth0" or "enp3s0"
-INTERFACE: "enp3s0"
+INTERFACE: "lo"
 
 FREE_BASE: True
 
@@ -34,12 +34,12 @@ VISUALIZE_PIN: False
 VISUALIZE_FORCES: False
 
 residual_upper_body_action: True # Whether to use residual upper body action for balancing
-use_upper_body_controller: False # Whether to use IK-based upper body controller
+use_upper_body_controller: True # Whether to use IK-based upper body controller
 
 # ---- Balance Descriptor (BD) ----------------------------------------
 # true  → BD policy (input dim=578): use with BD-trained onnx
 # false → original FALCON (input dim=575): use with original onnx
-use_balance_descriptor: true
+use_balance_descriptor: false
 
 balance_descriptor:
   bd_nominal_type: 3       # 1=Nominal-1, 3=Nominal-3 (must match training)
@@ -73,7 +73,7 @@ balance_descriptor:
 # true  → AMASS motion replays as ref_upper_dof_pos; toggle with 't' key
 # false → upper body stays at default angles
 use_motion_player: true
-motion_player_pkl: "/home/hms/Humanoid/FALCON_experiment/humanoidverse/data/motions/g1_29dof/v1/accad_val.pkl"
+motion_player_pkl: "../humanoidverse/data/motions/g1_29dof/v1/accad_val.pkl"
 motion_player_fps_scale: 0.1       # playback speed (1.0 = original)
 motion_player_fps_scale_step: 0.25 # f/g key increment
 motion_player_blend_steps: 20      # cross-fade steps on motion transition

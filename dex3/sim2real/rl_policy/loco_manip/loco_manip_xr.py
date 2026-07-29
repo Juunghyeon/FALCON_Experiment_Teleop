@@ -45,7 +45,7 @@ class LocoManipPolicyXR(LocoManipPolicy):
     def __init__(self, config, model_path, cert_file, key_file, engage_mode="any",
                  display_mode="pass-through", motion_scale=1.0, xr_mode="controller",
                  xr_debug=False, head_cam=False, head_cam_width=640, head_cam_height=480,
-                 rl_rate=50, policy_action_scale=0.25):
+                 dex3=False, rl_rate=50, policy_action_scale=0.25):
         if not config.get("use_upper_body_controller", False):
             raise ValueError(
                 "loco_manip_xr.py requires use_upper_body_controller: true in the config "
@@ -58,6 +58,8 @@ class LocoManipPolicyXR(LocoManipPolicy):
         self.motion_scale = motion_scale
         self.xr_debug = xr_debug
         self.head_cam = head_cam
+        self.xr_mode = xr_mode
+        self.dex3 = dex3
 
         super().__init__(config=config, model_path=model_path, rl_rate=rl_rate,
                           policy_action_scale=policy_action_scale)
@@ -65,6 +67,8 @@ class LocoManipPolicyXR(LocoManipPolicy):
         self._init_xr(cert_file, key_file, display_mode, xr_mode, head_cam_width, head_cam_height)
         if head_cam:
             self._init_head_cam(head_cam_width, head_cam_height)
+        if dex3:
+            self._init_dex3()
 
         # Deadman-switch engage state.
         self._engaged = False
@@ -97,6 +101,61 @@ class LocoManipPolicyXR(LocoManipPolicy):
             f"XR bridge ready (display_mode={display_mode}, xr_mode={xr_mode}). "
             "Open the headset browser and Enter VR.", "cyan"
         ))
+
+    # ------------------------------------------------------------------
+    # Dex3 fingers: simple open/close (not full dex_retargeting-based
+    # per-finger mimicry) driven by hand-tracking pinch/squeeze, since only
+    # "open vs. closed" grasping was requested. Joint order/limits below
+    # match g1_29dof_dex3_freebase.xml (see the [thumb0,1,2,middle0,1,index0,1]
+    # ordering used by the sim2sim DDS bridge in unitree_sdk2py_bridge.py).
+    # thumb_0 (ab/adduction) is left at 0 in both poses — closing it too
+    # tends to make the thumb collide with the palm/fingers in sim.
+    _DEX3_OPEN_LEFT = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    _DEX3_CLOSE_LEFT = np.array([0.0, 1.0472, 1.74533, -1.5708, -1.74533, -1.5708, -1.74533])
+    _DEX3_OPEN_RIGHT = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    _DEX3_CLOSE_RIGHT = np.array([0.0, -1.0472, -1.74533, 1.5708, 1.74533, 1.5708, 1.74533])
+
+    def _init_dex3(self):
+        from unitree_sdk2py.core.channel import ChannelPublisher
+        from unitree_sdk2py.idl.default import unitree_hg_msg_dds__HandCmd_
+        from unitree_sdk2py.idl.unitree_hg.msg.dds_ import HandCmd_
+
+        self._dex3_left_puber = ChannelPublisher("rt/dex3/left/cmd", HandCmd_)
+        self._dex3_left_puber.Init()
+        self._dex3_right_puber = ChannelPublisher("rt/dex3/right/cmd", HandCmd_)
+        self._dex3_right_puber.Init()
+        self._dex3_left_cmd = unitree_hg_msg_dds__HandCmd_()
+        self._dex3_right_cmd = unitree_hg_msg_dds__HandCmd_()
+        for cmd in (self._dex3_left_cmd, self._dex3_right_cmd):
+            for i in range(7):
+                cmd.motor_cmd[i].kp = 1.5
+                cmd.motor_cmd[i].kd = 0.2
+        self.logger.info(colored("Dex3 finger open/close bridge ready", "cyan"))
+
+    def _update_dex3(self, tele_data):
+        if self.xr_mode == "hand":
+            # pinchValue: ~15 (open) -> 0 (fully pinched). Normalize to a
+            # 0 (open) .. 1 (closed) grasp fraction and linearly blend
+            # between the open/close poses so the fingers track the pinch
+            # gesture continuously rather than snapping between two states.
+            left_frac = float(np.clip(1.0 - tele_data.left_hand_pinchValue / 15.0, 0.0, 1.0))
+            right_frac = float(np.clip(1.0 - tele_data.right_hand_pinchValue / 15.0, 0.0, 1.0))
+        else:
+            # Controller mode: no continuous grasp signal, just grip driven
+            # by the trigger — simple open/close, no per-finger mimicry.
+            # triggerValue follows the same 10.0 (released) -> 0.0 (fully
+            # pressed) convention as hand mode's pinchValue.
+            left_frac = float(np.clip(1.0 - tele_data.left_ctrl_triggerValue / 10.0, 0.0, 1.0))
+            right_frac = float(np.clip(1.0 - tele_data.right_ctrl_triggerValue / 10.0, 0.0, 1.0))
+
+        left_q = self._DEX3_OPEN_LEFT + left_frac * (self._DEX3_CLOSE_LEFT - self._DEX3_OPEN_LEFT)
+        right_q = self._DEX3_OPEN_RIGHT + right_frac * (self._DEX3_CLOSE_RIGHT - self._DEX3_OPEN_RIGHT)
+
+        for i in range(7):
+            self._dex3_left_cmd.motor_cmd[i].q = float(left_q[i])
+            self._dex3_right_cmd.motor_cmd[i].q = float(right_q[i])
+        self._dex3_left_puber.Write(self._dex3_left_cmd)
+        self._dex3_right_puber.Write(self._dex3_right_cmd)
 
     def _init_head_cam(self, width, height):
         from sim2real.utils.head_cam_shm import HeadCamSubscriber
@@ -133,6 +192,13 @@ class LocoManipPolicyXR(LocoManipPolicy):
     def _is_engaged(self, tele_data):
         if self.engage_mode == "always":
             return True
+        if self.xr_mode == "hand":
+            # No controller trigger/squeeze buttons in hand-tracking mode,
+            # and using a hand gesture (e.g. fist) as the deadman switch
+            # would collide with using that same gesture to close the Dex3
+            # fingers (--dex3). So hand mode always tracks; --engage is only
+            # meaningful with --xr_mode controller.
+            return True
         left = right = False
         if self.engage_mode in ("any", "trigger"):
             left = left or bool(tele_data.left_ctrl_trigger)
@@ -166,8 +232,13 @@ class LocoManipPolicyXR(LocoManipPolicy):
 
         engaged_now = self._is_engaged(tele_data)
 
-        left_wrist = tele_data.left_wrist_pose[:3, 3]
-        right_wrist = tele_data.right_wrist_pose[:3, 3]
+        if self.xr_mode == "hand":
+            # WebXR hand-tracking skeleton: joint 0 is the wrist landmark.
+            left_wrist = tele_data.left_hand_pos[0]
+            right_wrist = tele_data.right_hand_pos[0]
+        else:
+            left_wrist = tele_data.left_wrist_pose[:3, 3]
+            right_wrist = tele_data.right_wrist_pose[:3, 3]
 
         if engaged_now and not self._engaged:
             # Rising edge: zero at the current hand position so the arm
@@ -198,23 +269,45 @@ class LocoManipPolicyXR(LocoManipPolicy):
 
             self.update_waypoints()
 
+        if self.dex3:
+            self._update_dex3(tele_data)
+
         if self.xr_debug:
             self._xr_debug_count += 1
             if self._xr_debug_count % 50 == 1:
-                print(
-                    f"[xr] ready={int(tele_data.motion_data_ready)} "
-                    f"L[trig={int(tele_data.left_ctrl_trigger)}/{tele_data.left_ctrl_triggerValue:.1f} "
-                    f"sqz={int(tele_data.left_ctrl_squeeze)}/{tele_data.left_ctrl_squeezeValue:.2f} "
-                    f"A={int(tele_data.left_ctrl_aButton)} B={int(tele_data.left_ctrl_bButton)} "
-                    f"stk={np.round(tele_data.left_ctrl_thumbstickValue, 2)}] "
-                    f"R[trig={int(tele_data.right_ctrl_trigger)}/{tele_data.right_ctrl_triggerValue:.1f} "
-                    f"sqz={int(tele_data.right_ctrl_squeeze)}/{tele_data.right_ctrl_squeezeValue:.2f} "
-                    f"A={int(tele_data.right_ctrl_aButton)} B={int(tele_data.right_ctrl_bButton)}] "
-                    f"engaged={int(self._engaged)} "
-                    f"wristL={np.round(left_wrist, 3)} wristR={np.round(right_wrist, 3)}"
-                )
+                if self.xr_mode == "hand":
+                    print(
+                        f"[xr] ready={int(tele_data.motion_data_ready)} "
+                        f"L[pinch={tele_data.left_hand_pinchValue:.1f} sqz={int(tele_data.left_hand_squeeze)}] "
+                        f"R[pinch={tele_data.right_hand_pinchValue:.1f} sqz={int(tele_data.right_hand_squeeze)}] "
+                        f"engaged={int(self._engaged)} "
+                        f"wristL={np.round(left_wrist, 3)} wristR={np.round(right_wrist, 3)}"
+                    )
+                else:
+                    print(
+                        f"[xr] ready={int(tele_data.motion_data_ready)} "
+                        f"L[trig={int(tele_data.left_ctrl_trigger)}/{tele_data.left_ctrl_triggerValue:.1f} "
+                        f"sqz={int(tele_data.left_ctrl_squeeze)}/{tele_data.left_ctrl_squeezeValue:.2f} "
+                        f"A={int(tele_data.left_ctrl_aButton)} B={int(tele_data.left_ctrl_bButton)} "
+                        f"stk={np.round(tele_data.left_ctrl_thumbstickValue, 2)}] "
+                        f"R[trig={int(tele_data.right_ctrl_trigger)}/{tele_data.right_ctrl_triggerValue:.1f} "
+                        f"sqz={int(tele_data.right_ctrl_squeeze)}/{tele_data.right_ctrl_squeezeValue:.2f} "
+                        f"A={int(tele_data.right_ctrl_aButton)} B={int(tele_data.right_ctrl_bButton)}] "
+                        f"engaged={int(self._engaged)} "
+                        f"wristL={np.round(left_wrist, 3)} wristR={np.round(right_wrist, 3)}"
+                    )
 
-        self._handle_xr_buttons(tele_data)
+        # Controller-only buttons (start/stop/stand-walk/thumbstick locomotion):
+        # televuer doesn't allocate ctrl_* shared state at all in hand-tracking
+        # mode (see TeleVuer.__init__), so tele_data.right_ctrl_bButton etc.
+        # would raise AttributeError there. In hand mode the policy just runs
+        # continuously with locomotion held at zero; start/stop/init aren't
+        # exposed via hand gestures (yet).
+        if self.xr_mode == "controller":
+            self._handle_xr_buttons(tele_data)
+        else:
+            self.lin_vel_command[:] = 0.0
+            self.ang_vel_command[:] = 0.0
 
     def _handle_xr_buttons(self, tele_data):
         # Right B: emergency stop (edge-triggered so holding it doesn't spam).
@@ -297,6 +390,10 @@ if __name__ == "__main__":
                               "--display_mode immersive (or ego).")
     parser.add_argument("--head_cam_width", type=int, default=640)
     parser.add_argument("--head_cam_height", type=int, default=480)
+    parser.add_argument("--dex3", action="store_true",
+                         help="Drive Dex3 finger open/close (via rt/dex3/{left,right}/cmd). "
+                              "In --xr_mode hand: continuous pinch distance. "
+                              "In --xr_mode controller: trigger-driven open/close.")
     args = parser.parse_args()
 
     with open(args.config) as file:
@@ -319,6 +416,7 @@ if __name__ == "__main__":
         head_cam=args.head_cam,
         head_cam_width=args.head_cam_width,
         head_cam_height=args.head_cam_height,
+        dex3=args.dex3,
         rl_rate=50,
         policy_action_scale=0.25,
     )

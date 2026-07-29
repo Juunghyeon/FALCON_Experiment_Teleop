@@ -34,39 +34,33 @@ class BasicSdk2Bridge(ABC):
         self.torques = np.zeros(self.num_motor)
         self.torque_limit = np.array(self.robot.MOTOR_EFFORT_LIMIT_LIST)
 
-        # Name -> MJCF address maps for the policy's NUM_MOTORS body joints.
+        # Address maps for the policy's NUM_MOTORS body joints/actuators.
         #
-        # Do NOT assume qpos[7:7+N] / qvel[6:6+N] are contiguous body-motor
-        # ranges. That only holds when the MJCF's body-tree DFS order happens
-        # to put all N policy joints before any other joint. It breaks once
-        # extra actuated joints are interleaved into the tree — e.g. Dex3
-        # fingers attached as children of the wrist bodies push everything
-        # declared after the *first* wrist (here: the whole right arm) later
-        # in qpos/qvel by num_hand_motor slots. Building explicit per-joint
-        # address arrays from dof_names keeps the policy's 29-dof
-        # ordering/semantics untouched regardless of how the MJCF happens to
-        # lay out any additional (non-policy) actuated joints.
-        dof_names = robot_config.get("dof_names", None)
-        if dof_names is not None:
-            joint_ids = [self.mj_model.joint(name).id for name in dof_names]
-            self.motor_qpos_adr = np.array([self.mj_model.jnt_qposadr[jid] for jid in joint_ids])
-            self.motor_dof_adr = np.array([self.mj_model.jnt_dofadr[jid] for jid in joint_ids])
-            # Actuator names in the MJCF don't carry the "_joint" suffix (e.g.
-            # joint "left_hip_pitch_joint" is driven by actuator
-            # "left_hip_pitch"), so resolve via actuator_trnid (the joint each
-            # actuator drives) rather than by name.
-            actuator_joint_id = self.mj_model.actuator_trnid[:, 0]
-            self.motor_actuator_adr = np.array(
-                [int(np.where(actuator_joint_id == jid)[0][0]) for jid in joint_ids]
-            )
-        else:
-            # Fallback: legacy contiguous assumption (no dof_names in config).
-            # Only valid when the MJCF has exactly num_motor actuated joints
-            # laid out contiguously right after the free base.
-            base_qpos = 7 if self.free_base else 0
-            self.motor_qpos_adr = base_qpos + np.arange(self.num_motor)
-            self.motor_dof_adr = base_dof + np.arange(self.num_motor)
-            self.motor_actuator_adr = base_dof + np.arange(self.num_motor)
+        # IMPORTANT: config["dof_names"] is NOT the physical motor ordering —
+        # it's a separate list used elsewhere only to look up upper/lower-body
+        # index subsets (see base_policy.py's upper_dof_indices). Its order
+        # (e.g. hip_yaw, hip_roll, hip_pitch) does not match the actual
+        # motor_cmd[i]/DEFAULT_DOF_ANGLES[i]/MOTOR_KP[i] ordering, which
+        # follows the MJCF <actuator> declaration order (hip_pitch, hip_roll,
+        # hip_yaw, ...). Using dof_names here silently swapped hip
+        # pitch/roll/yaw (and others) for every joint, sending each motor's
+        # PD target to the wrong physical joint — this caused the whole robot
+        # to seize up/thrash the instant the policy started applying torques.
+        #
+        # The policy's own motor index IS the MJCF actuator declaration
+        # order (actuators 0..NUM_MOTORS-1, right after the 6 free-base
+        # actuators) — that part is untouched by adding Dex3 fingers, since
+        # fingers are appended as new actuators after it. So motor_actuator_adr
+        # is just the trivial contiguous range; only qpos/qvel need per-joint
+        # lookup, because body-tree DFS order (which qpos/qvel follow) does
+        # shift once Dex3 fingers are attached as children of the wrist
+        # bodies (everything after the *first* wrist, i.e. the whole right
+        # arm, moves later in qpos/qvel by num_hand_motor slots).
+        self.motor_actuator_adr = base_dof + np.arange(self.num_motor)
+        actuator_joint_id = self.mj_model.actuator_trnid[:, 0]
+        motor_joint_ids = [int(actuator_joint_id[a]) for a in self.motor_actuator_adr]
+        self.motor_qpos_adr = np.array([self.mj_model.jnt_qposadr[jid] for jid in motor_joint_ids])
+        self.motor_dof_adr = np.array([self.mj_model.jnt_dofadr[jid] for jid in motor_joint_ids])
 
         # Dex3 finger actuators (if any) are additional actuators appended
         # after the policy's body-motor block, driven by a separate
