@@ -102,16 +102,6 @@ python rl_policy/loco_manip/loco_manip_xr.py \
 > `immersive` 모드는 헤드셋을 쓰면 모니터/키보드가 안 보인다. **로봇을 먼저 세워둔 뒤** 헤드셋을
 > 착용할 것. 비상정지는 오른손 **B**.
 
-```bash
-# 수정안
-python rl_policy/loco_manip/loco_manip_xr.py \
-  --config=config/g1/g1_29dof_falcon_xr.yaml \
-  --model_path=models/falcon/g1_29dof.onnx \
-  --cert_file=$HOME/.config/xr_teleoperate/cert.pem \
-  --key_file=$HOME/.config/xr_teleoperate/key.pem \
-  --display_mode immersive --head_cam --head_cam_source robot \
-  --img_server_ip 192.168.123.164
-  ```
 
 ### 로봇 세우기 (헤드셋 착용 전, 키보드로)
 
