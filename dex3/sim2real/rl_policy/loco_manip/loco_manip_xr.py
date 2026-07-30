@@ -128,6 +128,13 @@ class LocoManipPolicyXR(LocoManipPolicy):
         self._dex3_right_cmd = unitree_hg_msg_dds__HandCmd_()
         for cmd in (self._dex3_left_cmd, self._dex3_right_cmd):
             for i in range(7):
+                # RIS mode byte the real Dex3 firmware expects, matching
+                # xr_teleoperate's robot_hand_unitree.py _RIS_Mode: id in bits
+                # 0-3, status(0x01=enable) in bits 4-6, timeout in bit 7.
+                # Without this the real hand ignores the command (sim2sim's
+                # mujoco bridge doesn't check it, so this only bites on real
+                # hardware).
+                cmd.motor_cmd[i].mode = (i & 0x0F) | ((0x01 & 0x07) << 4)
                 cmd.motor_cmd[i].kp = 1.5
                 cmd.motor_cmd[i].kd = 0.2
         self.logger.info(colored("Dex3 finger open/close bridge ready", "cyan"))
@@ -345,11 +352,16 @@ class LocoManipPolicyXR(LocoManipPolicy):
     # ------------------------------------------------------------------
 
     def policy_action(self):
-        # Stale watchdog: if XR data stops arriving, zero locomotion
-        # commands but leave the arm target (and everything else) alone.
+        # Stale watchdog: if XR data stops arriving, zero locomotion commands
+        # and drop the engage latch, so that a reconnect is always treated as
+        # a fresh rising edge (re-zeroing the arm offset) instead of jumping
+        # to wherever the operator's real wrist ended up during the dropout.
         if time.time() - self._last_xr_time > STALE_TIMEOUT_S and self._last_xr_time > 0:
             self.lin_vel_command[:] = 0.0
             self.ang_vel_command[:] = 0.0
+            if self._engaged:
+                self.logger.info(colored("XR tracking released (stale data)", "yellow"))
+            self._engaged = False
 
         self._update_from_xr()
         if self.head_cam:
