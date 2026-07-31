@@ -414,7 +414,7 @@ class LocoManipPolicyXR(LocoManipPolicy):
         if self.stand_command[0, 0]:
             lx, ly = tele_data.left_ctrl_thumbstickValue
             rx, _ = tele_data.right_ctrl_thumbstickValue
-            self.lin_vel_command[0, 0] = float(ly) * 0.5
+            self.lin_vel_command[0, 0] = -float(ly) * 0.5
             self.lin_vel_command[0, 1] = -float(lx) * 0.5
             self.ang_vel_command[0, 0] = -float(rx) * 0.5
         else:
