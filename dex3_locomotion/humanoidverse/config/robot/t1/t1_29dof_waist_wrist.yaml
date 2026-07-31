@@ -1,0 +1,435 @@
+# @package _global_
+
+defaults:
+  - robot_base
+
+robot:
+  # Observation parameters
+  num_bodies: 30
+  dof_obs_size: 29
+  actions_dim: 29
+  lower_body_actions_dim: 13 # legs:12 + waist:1
+  upper_body_actions_dim: 16 # arms:14 + head:2
+  body_keys: ["upper_body", "lower_body"]
+  policy_obs_dim: -1 
+  critic_obs_dim: -1
+
+  force_control:
+    apply_force_link: ["left_hand_link", "right_hand_link"]
+    left_hand_link: "left_hand_link"
+    right_hand_link: "right_hand_link"
+
+  key_bodies: ["left_foot_link", "right_foot_link"]
+  contact_bodies: [ "left_foot_link", "right_foot_link" ]
+  num_feet: 2
+  right_foot_name: "left_foot_link"
+  left_foot_name: "left_foot_link"
+  foot_name: "foot_link"
+  knee_name: "Shank"
+  has_torso: True
+  torso_name: "Trunk"
+  base_name: "Waist"
+  has_upper_body_dof: True
+  dof_names: ['AAHead_yaw', 'Head_pitch',
+              'Left_Shoulder_Pitch', 'Left_Shoulder_Roll', 'Left_Elbow_Pitch', 'Left_Elbow_Yaw', 'Left_Wrist_Pitch', 'Left_Wrist_Yaw', 'Left_Hand_Roll',
+              'Right_Shoulder_Pitch', 'Right_Shoulder_Roll', 'Right_Elbow_Pitch', 'Right_Elbow_Yaw', 'Right_Wrist_Pitch', 'Right_Wrist_Yaw', 'Right_Hand_Roll',
+              'Waist',
+              'Left_Hip_Pitch', 'Left_Hip_Roll', 'Left_Hip_Yaw', 'Left_Knee_Pitch', 'Left_Ankle_Pitch', 'Left_Ankle_Roll',
+              'Right_Hip_Pitch', 'Right_Hip_Roll', 'Right_Hip_Yaw', 'Right_Knee_Pitch', 'Right_Ankle_Pitch', 'Right_Ankle_Roll']
+  upper_dof_names: ['AAHead_yaw', 'Head_pitch',
+                    'Left_Shoulder_Pitch', 'Left_Shoulder_Roll', 'Left_Elbow_Pitch', 'Left_Elbow_Yaw', 'Left_Wrist_Pitch', 'Left_Wrist_Yaw', 'Left_Hand_Roll',
+                    'Right_Shoulder_Pitch', 'Right_Shoulder_Roll', 'Right_Elbow_Pitch', 'Right_Elbow_Yaw', 'Right_Wrist_Pitch', 'Right_Wrist_Yaw', 'Right_Hand_Roll']
+  upper_left_arm_dof_names: ['Left_Shoulder_Pitch', 'Left_Shoulder_Roll', 'Left_Elbow_Pitch', 'Left_Elbow_Yaw', 'Left_Wrist_Pitch', 'Left_Wrist_Yaw', 'Left_Hand_Roll']
+  upper_right_arm_dof_names: ['Right_Shoulder_Pitch', 'Right_Shoulder_Roll', 'Right_Elbow_Pitch', 'Right_Elbow_Yaw', 'Right_Wrist_Pitch', 'Right_Wrist_Yaw', 'Right_Hand_Roll']
+  lower_dof_names: ['Waist',
+                    'Left_Hip_Pitch', 'Left_Hip_Roll', 'Left_Hip_Yaw', 'Left_Knee_Pitch', 'Left_Ankle_Pitch', 'Left_Ankle_Roll',
+                    'Right_Hip_Pitch', 'Right_Hip_Roll', 'Right_Hip_Yaw', 'Right_Knee_Pitch', 'Right_Ankle_Pitch', 'Right_Ankle_Roll']
+  waist_dof_names: ['Waist']
+  waist_yaw_dof_name: 'Waist'
+  arm_dof_names: ['Left_Shoulder_Pitch', 'Left_Shoulder_Roll', 'Left_Elbow_Pitch', 'Left_Elbow_Yaw', 'Left_Wrist_Pitch', 'Left_Wrist_Yaw', 'Left_Hand_Roll',
+                  'Right_Shoulder_Pitch', 'Right_Shoulder_Roll', 'Right_Elbow_Pitch', 'Right_Elbow_Yaw', 'Right_Wrist_Pitch', 'Right_Wrist_Yaw', 'Right_Hand_Roll']
+  left_arm_dof_names: ['Left_Shoulder_Pitch', 'Left_Shoulder_Roll', 'Left_Elbow_Pitch', 'Left_Elbow_Yaw', 'Left_Wrist_Pitch', 'Left_Wrist_Yaw', 'Left_Hand_Roll']
+  right_arm_dof_names: ['Right_Shoulder_Pitch', 'Right_Shoulder_Roll', 'Right_Elbow_Pitch', 'Right_Elbow_Yaw', 'Right_Wrist_Pitch', 'Right_Wrist_Yaw', 'Right_Hand_Roll']
+  left_ankle_dof_names: ['Left_Ankle_Pitch', 'Left_Ankle_Roll']
+  right_ankle_dof_names: ['Right_Ankle_Pitch', 'Right_Ankle_Roll']
+  knee_dof_names: ['Left_Knee_Pitch', 'Right_Knee_Pitch']
+  knee_joint_min_threshold: 0.35
+  symmetric_dofs_idx:
+    # left_dofs_idx_no: [2, 4, 11, 14, 15]
+    # left_dofs_idx_op: [3, 5, 12, 13, 16]
+    # right_dofs_idx_no: [6, 8, 17, 20, 21]
+    # right_dofs_idx_op: [7, 9, 18, 19, 22]
+    # waist_dofs_idx_op: [10]
+    # head_dofs_idx_no: [1]
+    # head_dofs_idx_op: [0]
+    lower_left_dofs_idx_no: [17, 20, 21]
+    lower_left_dofs_idx_op: [18, 19, 22]
+    lower_right_dofs_idx_no: [23, 26, 27]
+    lower_right_dofs_idx_op: [24, 25, 28]
+    # upper_left_dofs_idx_no: [2, 4]
+    # upper_left_dofs_idx_op: [3, 5]
+    # upper_right_dofs_idx_no: [6, 8]
+    # upper_right_dofs_idx_op: [7, 9]
+  dof_pos_lower_limit_list: [-1.57, -0.35,
+                             -3.31, -1.74, -2.27, -2.27, -2.27, -2.27, -2.27,
+                             -3.31, -1.57, -2.27, -2.27, -2.27, -2.27, -2.27,
+                             -1.57,
+                             -1.8, -0.3, -1, 0, -0.87, -0.44, 
+                             -1.8, -1.57, -1, 0, -0.87, -0.44]
+  dof_pos_upper_limit_list: [1.57, 1.22,
+                             1.22, 1.57, 2.27, 2.27, 2.27, 2.27, 2.27,
+                             1.22, 1.74, 2.27, 2.27, 2.27, 2.27, 2.27,
+                             1.57,
+                             1.57, 1.57, 1, 2.34, 0.35, 0.44,
+                             1.57, 0.3, 1, 2.34, 0.35, 0.44]
+  dof_effort_limit_list: [7, 7,
+                          18, 18, 18, 18, 18, 18, 18,
+                          18, 18, 18, 18, 18, 18, 18,
+                          30,
+                          45, 30, 30, 60, 12, 12,
+                          45, 30, 30, 60, 12, 12,]
+  dof_vel_limit_list: [12.56, 12.56,
+                       18.84, 18.84, 18.84, 18.84, 18.84, 18.84, 18.84,
+                       18.84, 18.84, 18.84, 18.84, 18.84, 18.84, 18.84,
+                       10.88,
+                       12.5, 10.9, 10.9, 11.7, 18.8, 12.4,
+                       12.5, 10.9, 10.9, 11.7, 18.8, 12.4,]
+  
+  dof_effort_limit_scale: 0.9
+  # only apply for isaacsim
+  dof_armature_list: [0.03, 0.03,
+                      0.03, 0.03, 0.03, 0.03, 
+                      0.03, 0.03, 0.03, 0.03,
+                      0.03,
+                      0.03, 0.03, 0.03, 0.03, 0.03, 0.03,
+                      0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
+  # only apply for isaacsim
+  dof_joint_friction_list: [0.03, 0.03,
+                            0.03, 0.03, 0.03, 0.03, 
+                            0.03, 0.03, 0.03, 0.03,
+                            0.03,
+                            0.03, 0.03, 0.03, 0.03, 0.03, 0.03,
+                            0.03, 0.03, 0.03, 0.03, 0.03, 0.03]
+
+  body_names: ['Trunk', 'H1', 'H2', 
+               'AL1', 'AL2', 'AL3', 'AL4', 'AL5', 'AL6', 'left_hand_link',
+               'AR1', 'AR2', 'AR3', 'AR4', 'AR5', 'AR6', 'right_hand_link',
+               'Waist', 
+               'Hip_Pitch_Left', 'Hip_Roll_Left', 'Hip_Yaw_Left', 'Shank_Left', 'Ankle_Cross_Left', 'left_foot_link', 
+               'Hip_Pitch_Right', 'Hip_Roll_Right', 'Hip_Yaw_Right', 'Shank_Right', 'Ankle_Cross_Right', 'right_foot_link']
+
+
+  terminate_after_contacts_on : [] 
+  penalize_contacts_on: ["Trunk", "H1", "H2", "AL", "AR", "Waist", "Hip", "Shank", "Ankle"]
+  init_state:
+    pos: [0.0, 0.0, 0.72] # x,y,z [m]
+    rot: [0.0, 0.0, 0.0, 1.0] # x,y,z,w [quat]
+    lin_vel: [0.0, 0.0, 0.0]  # x,y,z [m/s]
+    ang_vel: [0.0, 0.0, 0.0]  # x,y,z [rad/s]
+    default_joint_angles: # = target angles [rad] when action = 0.0
+      AAHead_yaw: 0.
+      Head_pitch: 0.
+      Left_Shoulder_Pitch: 0.2
+      Left_Shoulder_Roll: -1.35
+      Left_Elbow_Pitch: 0.
+      Left_Elbow_Yaw: -0.5
+      Left_Wrist_Pitch: 0.
+      Left_Wrist_Yaw: 0.
+      Left_Hand_Roll: 0.
+      Right_Shoulder_Pitch: 0.2
+      Right_Shoulder_Roll: 1.35
+      Right_Elbow_Pitch: 0.
+      Right_Elbow_Yaw: 0.5
+      Right_Wrist_Pitch: 0.
+      Right_Wrist_Yaw: 0.
+      Right_Hand_Roll: 0.
+      Waist: 0.
+      Left_Hip_Pitch: -0.2
+      Left_Hip_Roll: 0.
+      Left_Hip_Yaw: 0. 
+      Left_Knee_Pitch: 0.4
+      Left_Ankle_Pitch: -0.25
+      Left_Ankle_Roll: 0.
+      Right_Hip_Pitch: -0.2
+      Right_Hip_Roll: 0. 
+      Right_Hip_Yaw: 0.
+      Right_Knee_Pitch: 0.4
+      Right_Ankle_Pitch: -0.25
+      Right_Ankle_Roll: 0.
+
+
+  randomize_link_body_names: [
+    'Trunk', 
+    'Hip_Pitch_Left', 'Hip_Roll_Left', 'Hip_Yaw_Left', 'Shank_Left', 'Ankle_Cross_Left', 'left_foot_link', 
+    'Hip_Pitch_Right', 'Hip_Roll_Right', 'Hip_Yaw_Right', 'Shank_Right', 'Ankle_Cross_Right', 'right_foot_link'
+  ]
+
+  control:
+    control_type: P
+    # PD Drive parameters:
+    stiffness: # [N*m/rad]
+      Head_yaw: 5
+      Head_pitch: 5
+      Hip_Yaw: 200
+      Hip_Roll: 200
+      Hip_Pitch: 200
+      Knee: 200
+      Ankle_Pitch: 50
+      Ankle_Roll: 50
+      Waist: 200
+      Shoulder_Pitch: 20
+      Shoulder_Roll: 20
+      Elbow_Pitch: 20
+      Elbow_Yaw: 20
+      Wrist_Pitch: 20
+      Wrist_Yaw: 20
+      Hand_Roll: 20
+
+    damping: # [N*m/rad]  # [N*m*s/rad]
+      Head_yaw: 0.5
+      Head_pitch: 0.5
+      Hip_Yaw: 5
+      Hip_Roll: 5
+      Hip_Pitch: 5
+      Knee: 5
+      Ankle_Pitch: 3
+      Ankle_Roll: 3
+      Waist: 5
+      Shoulder_Pitch: 0.5
+      Shoulder_Roll: 0.5
+      Elbow_Pitch: 0.5
+      Elbow_Yaw: 0.5
+      Wrist_Pitch: 0.5
+      Wrist_Yaw: 0.5
+      Hand_Roll: 0.5
+    # action scale: target angle = actionScale * action + defaultAngle
+    action_scale: 0.25
+    action_clip_value: 100.0
+    clip_torques: True
+
+  asset:
+    collapse_fixed_joints: True # merge bodies connected by fixed joints. Specific fixed joints can be kept by adding " <... dont_collapse="true">
+    replace_cylinder_with_capsule: True # replace collision cylinders with capsules, leads to faster/more stable simulation
+    flip_visual_attachments: False
+    armature: 0.001 # isaacgym armature is set by this 0.001
+    thickness: 0.01
+    max_angular_velocity: 1000.
+    max_linear_velocity: 1000.
+    density: 0.001
+    angular_damping: 0.
+    linear_damping: 0.
+
+    urdf_file: "t1/${robot.asset.robot_type}.urdf"
+    usd_file: "t1/${robot.asset.robot_type}.usd"
+    xml_file: "t1/${robot.asset.robot_type}.xml"
+    robot_type: t1_29dof
+    self_collisions: 1 # 1 to disable, 0 to enable self collisions
+    default_dof_drive_mode: 3
+
+    fix_base_link: False # TEST: fix base link to world
+
+  motion:
+    motion_file : 'humanoidverse/data/motions/t1_29dof/v1/accad_all.pkl' #TODO: add motion file
+    asset:
+      assetRoot: "humanoidverse/data/robots/t1/"
+      assetFileName: "t1_29dof.xml"
+      urdfFileName: "t1_29dof.urdf"
+
+    humanoid_type: t1_29dof
+    bias_offset: False
+    has_self_collision: True
+    has_mesh: False
+    has_jt_limit: False
+    has_dof_subset: True
+    has_upright_start: True
+    has_smpl_pd_offset: False
+    remove_toe: False # For humanoid's geom toe
+    motion_sym_loss: False
+    sym_loss_coef: 1
+    big_ankle: True
+
+    has_shape_obs: false
+    has_shape_obs_disc: false
+    has_shape_variation: False
+
+    uniform_sample: False
+    motion_fps_scale: 1.0
+
+    standardize_motion_length: True
+    standardize_motion_length_value: 10 # 10s
+
+    reverse_motion: False
+
+    masterfoot: False
+    freeze_toe: false
+    freeze_hand: False
+    box_body: True
+    real_weight: True
+    real_weight_porpotion_capsules: True
+    real_weight_porpotion_boxes: True
+
+    body_names: ['Trunk', 'H1', 'H2', 
+                 'AL1', 'AL2', 'AL3', 'AL4', 'AL5', 'AL6', 'left_hand_link',
+                 'AR1', 'AR2', 'AR3', 'AR4', 'AR5', 'AR6', 'right_hand_link',
+                 'Waist', 
+                 'Hip_Pitch_Left', 'Hip_Roll_Left', 'Hip_Yaw_Left', 'Shank_Left', 'Ankle_Cross_Left', 'left_foot_link', 
+                 'Hip_Pitch_Right', 'Hip_Roll_Right', 'Hip_Yaw_Right', 'Shank_Right', 'Ankle_Cross_Right', 'right_foot_link']
+          
+    # limb_weight_group: 
+    #   - ['Hip_Pitch_Left', 'Hip_Roll_Left', 'Hip_Yaw_Left', 'Shank_Left', 'Ankle_Cross_Left', 'left_foot_link']
+    #   - ['Hip_Pitch_Right', 'Hip_Roll_Right', 'Hip_Yaw_Right', 'Shank_Right', 'Ankle_Cross_Right', 'right_foot_link']
+    #   - ['Trunk', 'H1', 'H2','Waist']
+    #   - ['AL1', 'AL2', 'AL3', 'left_hand_link']
+    #   - ['AR1', 'AR2', 'AR3', 'right_hand_link']
+
+    dof_names: ['AAHead_yaw', 'Head_pitch',
+                'Left_Shoulder_Pitch', 'Left_Shoulder_Roll', 'Left_Elbow_Pitch', 'Left_Elbow_Yaw', 'Left_Wrist_Pitch', 'Left_Wrist_Yaw', 'Left_Hand_Roll',
+                'Right_Shoulder_Pitch', 'Right_Shoulder_Roll', 'Right_Elbow_Pitch', 'Right_Elbow_Yaw', 'Right_Wrist_Pitch', 'Right_Wrist_Yaw', 'Right_Hand_Roll',
+                'Waist',
+                'Left_Hip_Pitch', 'Left_Hip_Roll', 'Left_Hip_Yaw', 'Left_Knee_Pitch', 'Left_Ankle_Pitch', 'Left_Ankle_Roll',
+                'Right_Hip_Pitch', 'Right_Hip_Roll', 'Right_Hip_Yaw', 'Right_Knee_Pitch', 'Right_Ankle_Pitch', 'Right_Ankle_Roll']
+    right_foot_name: 'r_foot_roll' 
+    left_foot_name: 'l_foot_roll' 
+
+
+    nums_extend_bodies: 3
+    extend_config:
+      - joint_name: "real_left_hand_link"
+        parent_name: "left_hand_link"
+        pos: [0.0, 0.1, 0.0]
+        rot: [1.0, 0.0, 0.0, 0.0] # w x y z
+      - joint_name: "real_right_hand_link"
+        parent_name: "right_hand_link"
+        pos: [0.0, -0.1, 0.0]
+        rot: [1.0, 0.0, 0.0, 0.0] # w x y z
+      - joint_name: "real_H2"
+        parent_name: "Trunk"
+        pos: [0.0, 0.0, 0.5]
+        rot: [1.0, 0.0, 0.0, 0.0] # w x y z
+
+    motion_tracking_link:
+      - "real_left_hand_link"
+      - "real_right_hand_link"
+      - "real_H2"
+
+    lower_body_link:
+      - "Trunk"
+      - "Waist"
+      - "Hip_Pitch_Left"
+      - "Hip_Roll_Left"
+      - "Hip_Yaw_Left"
+      - "Shank_Left"
+      - "Ankle_Cross_Left"
+      - "left_foot_link"
+      - "Hip_Pitch_Right"
+      - "Hip_Roll_Right"
+      - "Hip_Yaw_Right"
+      - "Shank_Right"
+      - "Ankle_Cross_Right"
+      - "right_foot_link"
+
+    upper_body_link:
+      - "H1"
+      - "H2"
+      - "AL1"
+      - "AL2"
+      - "AL3"
+      - "AL4"
+      - "AL5"
+      - "AL6"
+      - "left_hand_link"
+      - "AR1"
+      - "AR2"
+      - "AR3"
+      - "AR4"
+      - "AR5"
+      - "AR6"
+      - "right_hand_link"
+
+
+    pelvis_link: "Waist"
+    base_link: "Trunk"
+    hips_link:
+      - "Hip_Pitch_Left"
+      - "Hip_Roll_Left"
+      - "Hip_Yaw_Left"
+      - "Hip_Pitch_Right"
+      - "Hip_Roll_Right"
+      - "Hip_Yaw_Right"
+    
+    joint_matches:
+      - ["Waist", "Pelvis"]
+      - ["Hip_Pitch_Left", "L_Hip"]
+      - ["Shank_Left", "L_Knee"]
+      - ["left_foot_link", "L_Ankle"]
+      - ["Hip_Pitch_Right", "R_Hip"]
+      - ["Shank_Right", "R_Knee"]
+      - ["right_foot_link", "R_Ankle"]
+      - ["AL1", "L_Shoulder"]
+      - ["AL4", "L_Elbow"]
+      - ["real_left_hand_link", "L_Hand"]
+      - ["AR1", "R_Shoulder"]
+      - ["AR4", "R_Elbow"]
+      - ["real_right_hand_link", "R_Hand"]
+      - ["real_H2", "Head"]
+    
+    smpl_pose_modifier:
+      - Pelvis: "[np.pi/2, 0, np.pi/2]"
+      # - L_Shoulder: "[0, 0, -np.pi/2]"
+      # - R_Shoulder: "[0, 0, np.pi/2]"
+      # - L_Elbow: "[0, -np.pi/2, 0]"
+      # - R_Elbow: "[0, np.pi/2, 0]"
+      - L_Shoulder: "[0, 0, 0]"
+      - R_Shoulder: "[0, 0, 0]"
+      - L_Elbow: "[0, 0, 0]"
+      - R_Elbow: "[0, 0, 0]"
+
+    visualization:
+      customize_color : True
+      marker_joint_colors : 
+      - [0.929, 0.867, 0.437] # AAHead_yaw
+      - [0.929, 0.867, 0.437] # Head_pitch
+      - [0.929, 0.867, 0.437] # Left_Shoulder_Pitch
+      - [0.929, 0.867, 0.437] # Left_Shoulder_Roll
+      - [0.929, 0.867, 0.437] # Left_Elbow_Pitch
+      - [0.929, 0.867, 0.437] # Left_Elbow_Yaw
+      - [0.929, 0.867, 0.437] # Left_Wrist_Pitch
+      - [0.929, 0.867, 0.437] # Left_Wrist_Yaw
+      - [0.929, 0.867, 0.437] # Left_Hand_Roll
+      - [0.929, 0.867, 0.437] # Right_Shoulder_Pitch
+      - [0.929, 0.867, 0.437] # Right_Shoulder_Roll
+      - [0.929, 0.867, 0.437] # Right_Elbow_Pitch
+      - [0.929, 0.867, 0.437] # Right_Elbow_Yaw
+      - [0.929, 0.867, 0.437] # Right_Wrist_Pitch
+      - [0.929, 0.867, 0.437] # Right_Wrist_Yaw
+      - [0.929, 0.867, 0.437] # Right_Hand_Roll
+      - [0.929, 0.867, 0.437] # Waist
+      - [0.929, 0.867, 0.437] # Left_Hip_Pitch
+      - [0.929, 0.867, 0.437] # Left_Hip_Roll
+      - [0.929, 0.867, 0.437] # Left_Hip_Yaw
+      - [0.929, 0.867, 0.437] # Left_Knee_Pitch
+      - [0.929, 0.867, 0.437] # Left_Ankle_Pitch
+      - [0.929, 0.867, 0.437] # Left_Ankle_Roll
+      - [0.929, 0.867, 0.437] # Right_Hip_Pitch
+      - [0.929, 0.867, 0.437] # Right_Hip_Roll
+      - [0.929, 0.867, 0.437] # Right_Hip_Yaw
+      - [0.929, 0.867, 0.437] # Right_Knee_Pitch
+      - [0.929, 0.867, 0.437] # Right_Ankle_Pitch
+      - [0.929, 0.867, 0.437] # Right_Ankle_Roll
+      # - [0, 0.351, 0.613] # left_elbow_joint_extend
+      # - [0, 0.351, 0.613] # right_elbow_joint_extend
+      # - [0, 0.351, 0.613] # head_link
+
+# Override motion lib default to use the adapted H1 variant
+# motion_lib:
+#   _target_: phys_anim.utils.motion_lib_h1.H1_MotionLib
+
+# Override simulation config to use the adapted H1 variant
+# env:
+#   config:
+#     simulator:
+#       sim:
+#         fps: 200 # 1/dt , dt = 0.005
+#         control_freq_inv: 4  # decimation
+#         substeps: 1
+
