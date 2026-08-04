@@ -39,7 +39,7 @@ use_upper_body_controller: True # Whether to use IK-based upper body controller
 # ---- Balance Descriptor (BD) ----------------------------------------
 # true  → BD policy (input dim=578): use with BD-trained onnx
 # false → original FALCON (input dim=575): use with original onnx
-use_balance_descriptor: false
+use_balance_descriptor: true
 
 balance_descriptor:
   bd_nominal_type: 3       # 1=Nominal-1, 3=Nominal-3 (must match training)

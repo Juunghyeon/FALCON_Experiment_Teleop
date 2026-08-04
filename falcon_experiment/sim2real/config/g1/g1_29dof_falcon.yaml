@@ -46,19 +46,19 @@ balance_descriptor:
   bd_d_ref: 0.10           # phase-invariant reference length (m)
   bd_d_ref_ds: 0.12
   bd_d_ref_ss: 0.05
-  bd_delta_safe: 2.0       # threat threshold
+  bd_delta_safe: 5.0       # must match training
   bd_m_safe_ds: -0.40
   bd_m_safe_ss: -0.85
-  # Real robot joint vel is noisy → lower alpha for stronger smoothing
-  bd_ema_alpha: 0.1        # l-channel smoothing (lower than sim: 0.3→0.1 for noise)
-  bd_ema_alpha_k: 0.05     # k-channel smoothing (stronger)
+  # Must match training values for consistent obs distribution
+  bd_ema_alpha: 0.6        # l-channel smoothing (matches training)
+  bd_ema_alpha_k: 0.4      # k-channel smoothing (matches training)
   bd_landing_freeze_n: 3   # freeze h_dot_ns N steps after touchdown
   bd_h_dot_l_clamp: 1000.0 # effectively no clamp (matches training)
   bd_h_dot_k_clamp: 1000.0
   bd_base_z_nominal: 0.75  # real-robot base_pos.z override (m)
   bd_delta_lp_alpha: 0.0
   bd_delta_fall_alpha: 0.0
-  bd_delta_bar_clamp: 3.0  # suppress l_dot spikes; real disturbance dbar~1~4
+  bd_delta_bar_clamp: 8.0  # must match training
   bd_delta_p_dead: 0.0
   bd_m_bar_dead: 0.0
   bd_pitch_safe_gain: 0.8

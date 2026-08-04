@@ -16,6 +16,7 @@ from sim2real.utils.comm import create_state_processor, create_command_sender
 
 from sim2real.utils.robot import Robot
 from sim2real.utils.math import quat_rotate_inverse_numpy
+from sim2real.utils.state_logger import StateLogger
 from unitree_sdk2py.core.channel import ChannelSubscriber
 from unitree_sdk2py.idl.unitree_go.msg.dds_ import WirelessController_
 
@@ -42,6 +43,8 @@ class BasePolicy:
         self._init_command_components()
         # Initialize input handlers
         self._init_input_handlers()
+        # Initialize state logger (not active until toggled on)
+        self._init_state_logger()
 
     # ============================================================================
     # Initialization Methods
@@ -207,6 +210,28 @@ class BasePolicy:
     def wireless_controller_handler(self, msg: WirelessController_):
         self.wc_msg = msg
 
+    def _init_state_logger(self):
+        """Initialize the state logger (starts inactive; toggled via keyboard/joystick)."""
+        log_dir = self.config.get("STATE_LOG_DIR", "logs")
+        prefix = self.config.get("STATE_LOG_PREFIX", "state_log")
+        try:
+            self.state_logger = StateLogger(log_dir=log_dir, prefix=prefix)
+            self.state_logger.wire_policy(self)
+        except Exception as e:
+            self.logger.error(f"StateLogger init failed: {e}")
+            self.state_logger = None
+
+    def _handle_logging_toggle(self):
+        """Toggle state logging on/off."""
+        if self.state_logger is None:
+            return
+        if self.state_logger.is_active():
+            self.state_logger.end()
+            self.logger.info(colored("State logging OFF", "yellow"))
+        else:
+            self.state_logger.start()
+            self.logger.info(colored(f"State logging ON -> {self.state_logger._out_path}", "yellow"))
+
     # ============================================================================
     # Policy Methods
     # ============================================================================
@@ -357,6 +382,9 @@ class BasePolicy:
         cmd_dq = np.zeros(self.num_dofs)
         cmd_tau = np.zeros(self.num_dofs)
         self.command_sender.send_command(cmd_q, cmd_dq, cmd_tau, robot_state_data[0, 7 : 7 + self.num_dofs])
+
+        if self.state_logger is not None and self.state_logger.is_active():
+            self.state_logger.log()
     
     def _get_obs_phase_time(self):
         """Calculate phase time for gait."""
@@ -420,7 +448,9 @@ class BasePolicy:
             self._handle_init_state()
         elif keycode in ["4", "5", "6", "7", "0"]:
             self._handle_kp_control(keycode)
-    
+        elif keycode == "l":
+            self._handle_logging_toggle()
+
     def handle_joystick_button(self, cur_key):
         """Handle joystick button presses."""
         if cur_key == "start":
@@ -431,6 +461,8 @@ class BasePolicy:
             self._handle_init_state()
         elif cur_key in ["Y+left", "Y+right", "A+left", "A+right", "A+Y"]:
             self._handle_joystick_kp_control(cur_key)
+        elif cur_key == "select":
+            self._handle_logging_toggle()
 
     # ============================================================================
     # Control Action Methods
@@ -505,6 +537,9 @@ class BasePolicy:
                 self.rate.sleep()
         except KeyboardInterrupt:
             pass
+        finally:
+            if self.state_logger is not None and self.state_logger.is_active():
+                self.state_logger.end()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Robot")

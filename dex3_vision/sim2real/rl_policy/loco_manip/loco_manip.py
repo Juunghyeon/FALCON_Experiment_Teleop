@@ -515,6 +515,9 @@ class LocoManipPolicy(DecLocomotionPolicy):
         cmd_q = q_target[0]
         self.command_sender.send_command(cmd_q, cmd_dq, cmd_tau, robot_state_data[0, 7 : 7 + self.num_dofs])
 
+        if self.state_logger is not None and self.state_logger.is_active():
+            self.state_logger.log()
+
     def update_waypoints(self):
         self.waypoints_left = [
             pin.SE3(self.EE_left_R.astype(np.float64), np.array([self.EE_left_x, self.EE_left_y, self.EE_left_z]))
@@ -690,6 +693,8 @@ class LocoManipPolicy(DecLocomotionPolicy):
         print(f"Waist dofs command: {self.waist_dofs_command}")
         if self._use_balance_descriptor:
             print(f"BD obs: {self._last_bd_obs}")
+        if self.state_logger is not None:
+            print(f"State logging: {'ON' if self.state_logger.is_active() else 'OFF'} (press 'l' or joystick 'select' to toggle)")
 
 
 if __name__ == "__main__":
